@@ -130,26 +130,26 @@ putInt64 = putWord64le . fromIntegral
 getInt64 :: Get Int64
 getInt64 = fromIntegral <$> getWord64le
 
-putCString :: Text -> Put
+putCString :: SC.ByteString -> Put
 putCString x = do
-  putByteString $ TE.encodeUtf8 x
+  putByteString $ x
   putWord8 0
 
-getCString :: Get Text
-getCString = TE.decodeUtf8 . SC.concat . LC.toChunks <$> getLazyByteStringNul
+getCString :: Get SC.ByteString
+getCString = SC.concat . LC.toChunks <$> getLazyByteStringNul
 
-putString :: Text -> Put
-putString x = let b = TE.encodeUtf8 x in do
-  putInt32 $ toEnum (SC.length b + 1)
-  putByteString b
+putString :: SC.ByteString -> Put
+putString x = do
+  putInt32 $ toEnum (SC.length x + 1)
+  putByteString x
   putWord8 0
 
-getString :: Get Text
+getString :: Get SC.ByteString
 getString = do
   len <- subtract 1 <$> getInt32
   b <- getByteString (fromIntegral len)
   getWord8
-  return $ TE.decodeUtf8 b
+  return $ b
 
 putDocument :: Document -> Put
 putDocument es = let b = runPut (mapM_ putField es) in do
@@ -169,7 +169,7 @@ getDocument = do
 
 putArray :: [Value] -> Put
 putArray vs = putDocument (zipWith f [0..] vs)
-  where f i v = (T.pack $! show i) := v
+  where f i v = (SC.pack $! show i) := v
 
 getArray :: Get [Value]
 getArray = map value <$> getDocument
@@ -229,12 +229,12 @@ getUTC :: Get UTCTime
 -- stored as milliseconds since Unix epoch
 getUTC = posixSecondsToUTCTime . (/ 1000) . fromIntegral <$> getInt64
 
-putClosure :: Text -> Document -> Put
+putClosure :: SC.ByteString -> Document -> Put
 putClosure x y = let b = runPut (putString x >> putDocument y) in do
   putInt32 $ (toEnum . fromEnum) (LC.length b + 4)  -- including this length field
   putLazyByteString b
 
-getClosure :: Get (Text, Document)
+getClosure :: Get (SC.ByteString, Document)
 getClosure = do
   getInt32
   x <- getString

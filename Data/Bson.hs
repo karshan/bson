@@ -72,7 +72,6 @@ showHexLen :: (Show n, Integral n) => Int -> n -> ShowS
 showHexLen d n = showString (replicate (d - sigDigits n) '0') . showHex n  where
   sigDigits 0 = 1
   sigDigits n' = truncate (logBase 16 $ fromIntegral n' :: Double) + 1
-
 -- * Document
 
 type Document = [Field]
@@ -81,7 +80,7 @@ type Document = [Field]
 -- | Recursively lookup a nested field in a Document.
 (!?) :: Val a => Document -> Label -> Maybe a
 doc !? l = foldM (flip lookup) doc (init chunks) >>= lookup (last chunks)
-  where chunks = T.split (== '.') l
+  where chunks = SC.split '.' l
 
 look :: (Monad m) => Label -> Document -> m Value
 -- ^ Value of field in document, or fail (Nothing) if field not found
@@ -134,16 +133,16 @@ k =: v = k := val v
 k =? ma = maybeToList (fmap (k =:) ma)
 
 instance Show Field where
-  showsPrec d (k := v) = showParen (d > 0) $ showString (' ' : T.unpack k) . showString ": " . showsPrec 1 v
+  showsPrec d (k := v) = showParen (d > 0) $ showString (' ' : SC.unpack k) . showString ": " . showsPrec 1 v
 
-type Label = Text
+type Label = SC.ByteString
 -- ^ The name of a BSON field
 
 -- * Value
 
 -- | A BSON value is one of the following types of values
 data Value = Float Double
-           | String Text
+           | String SC.ByteString
            | Doc Document
            | Array [Value]
            | Bin Binary
@@ -241,7 +240,8 @@ instance Val Float where
   cast' (Int64 x) = Just (fromIntegral x)
   cast' _         = Nothing
 
-instance Val Text where
+
+instance Val SC.ByteString where
   val                    = String
   cast' (String x)       = Just x
   cast' (Sym (Symbol x)) = Just x
@@ -249,13 +249,13 @@ instance Val Text where
 
 instance Val Char where
   val x   = valList [x]
-  valList = String . T.pack
+  valList = String . SC.pack
   cast' v = cast'List v >>= safeHead
     where safeHead list = case list of
                            x:_ -> Just x
                            _   -> Nothing
-  cast'List (String x)       = Just $ T.unpack x
-  cast'List (Sym (Symbol x)) = Just $ T.unpack x
+  cast'List (String x)       = Just $ SC.unpack x
+  cast'List (Sym (Symbol x)) = Just $ SC.unpack x
   cast'List _                = Nothing
 
 instance Val Field where
@@ -402,17 +402,17 @@ newtype UserDefined = UserDefined S.ByteString  deriving (Typeable, Show, Read, 
 
 -- ** Regex
 
-data Regex = Regex Text Text  deriving (Typeable, Show, Read, Eq, Ord)
+data Regex = Regex SC.ByteString SC.ByteString  deriving (Typeable, Show, Read, Eq, Ord)
 -- ^ The first string is the regex pattern, the second is the regex options string. Options are identified by characters, which must be listed in alphabetical order. Valid options are *i* for case insensitive matching, *m* for multiline matching, *x* for verbose mode, *l* to make \\w, \\W, etc. locale dependent, *s* for dotall mode (\".\" matches everything), and *u* to make \\w, \\W, etc. match unicode.
 
 -- ** Javascript
 
-data Javascript = Javascript Document Text deriving (Typeable, Show, Eq, Ord)
+data Javascript = Javascript Document SC.ByteString deriving (Typeable, Show, Eq, Ord)
 -- ^ Javascript code with possibly empty environment mapping variables to values that the code may reference
 
 -- ** Symbol
 
-newtype Symbol = Symbol Text  deriving (Typeable, Show, Read, Eq, Ord)
+newtype Symbol = Symbol SC.ByteString  deriving (Typeable, Show, Read, Eq, Ord)
 
 -- ** MongoStamp
 
